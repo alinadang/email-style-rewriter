@@ -1,0 +1,167 @@
+/*
+  content-script.js — guaranteed floating Rewrite button.
+  - Injects a fixed-position UI so you can always trigger a rewrite.
+  - Finds the focused compose textbox if present; otherwise opens a temporary editor.
+*/
+
+const FLOAT_ID = 'sr-floating-rewrite';
+const STYLE_PROFILE = { tone: 'friendly but concise', signature: 'Best, Alex' };
+
+// Create floating UI
+function createFloatingUI() {
+  if (document.getElementById(FLOAT_ID)) return;
+  const container = document.createElement('div');
+  container.id = FLOAT_ID;
+  Object.assign(container.style, {
+    position: 'fixed',
+    right: '18px',
+    bottom: '18px',
+    zIndex: 2147483647,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    alignItems: 'flex-end',
+    fontFamily: 'Arial, sans-serif'
+  });
+
+  // Main rewrite button
+  const btn = document.createElement('button');
+  btn.innerText = 'Rewrite';
+  btn.title = 'Rewrite message with my style';
+  Object.assign(btn.style, {
+    padding: '10px 14px',
+    borderRadius: '10px',
+    border: 'none',
+    background: '#1a73e8',
+    color: 'white',
+    fontSize: '14px',
+    cursor: 'pointer',
+    boxShadow: '0 4px 10px rgba(0,0,0,0.2)'
+  });
+
+  // small debug/show editor button
+  const mini = document.createElement('button');
+  mini.innerText = 'Edit';
+  mini.title = 'Open inline editor';
+  Object.assign(mini.style, {
+    padding: '6px 10px',
+    borderRadius: '8px',
+    border: 'none',
+    background: '#25a157',
+    color: 'white',
+    fontSize: '12px',
+    cursor: 'pointer',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+  });
+
+  container.appendChild(btn);
+  container.appendChild(mini);
+  document.body.appendChild(container);
+
+  btn.addEventListener('click', () => onRewriteClick());
+  mini.addEventListener('click', () => openInlineEditor());
+}
+
+// Find the focused compose textbox (Gmail)
+function findFocusedCompose() {
+  // look for role=textbox first, or any contenteditable area with selection
+  const boxes = Array.from(document.querySelectorAll('[role="textbox"], div[contenteditable="true"], [aria-label="Message Body"]'));
+  // prefer one that is focused or contains selection/caret
+  for (const b of boxes) {
+    if (b === document.activeElement) return b;
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && b.contains(sel.anchorNode)) return b;
+  }
+  // fallback: return first compose-like box (if any)
+  return boxes.length ? boxes[0] : null;
+}
+
+// Open a simple inline editor overlay for testing when no compose found
+function openInlineEditor() {
+  if (document.getElementById('sr-inline-editor')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'sr-inline-editor';
+  Object.assign(overlay.style, {
+    position: 'fixed',
+    left: '50%',
+    top: '50%',
+    transform: 'translate(-50%, -50%)',
+    zIndex: 2147483650,
+    background: 'white',
+    borderRadius: '8px',
+    padding: '12px',
+    boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+    width: '520px'
+  });
+  overlay.innerHTML = \`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <strong>Inline Editor</strong>
+      <button id="sr-inline-close" style="border:none;background:#eee;padding:6px;border-radius:6px;cursor:pointer">Close</button>
+    </div>
+    <textarea id="sr-inline-text" style="width:100%;height:160px;padding:8px;border-radius:6px;border:1px solid #ddd;font-size:14px"></textarea>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+      <button id="sr-inline-rewrite" style="padding:8px 12px;border-radius:8px;border:none;background:#1a73e8;color:white;cursor:pointer">Rewrite</button>
+    </div>
+  \`;
+  document.body.appendChild(overlay);
+  document.getElementById('sr-inline-close').onclick = () => overlay.remove();
+  document.getElementById('sr-inline-rewrite').onclick = async () => {
+    const txt = document.getElementById('sr-inline-text').value;
+    if (!txt.trim()) return alert('Paste some text first');
+    const rewritten = await callRewriteAPI(txt);
+    if (rewritten) document.getElementById('sr-inline-text').value = rewritten;
+  };
+}
+
+// Main click handler — finds compose box or opens editor
+async function onRewriteClick() {
+  const compose = findFocusedCompose();
+  if (!compose) {
+    // no compose found — open editor for testing
+    openInlineEditor();
+    return;
+  }
+
+  const original = compose.innerText || compose.textContent || '';
+  if (!original.trim()) {
+    alert('Compose box empty — click inside your draft and try again.');
+    return;
+  }
+
+  // Ask background to perform the rewrite (via chrome.runtime)
+  try {
+    const message = { action: 'rewrite', payload: { original_text: original, style_profile: STYLE_PROFILE } };
+    chrome.runtime.sendMessage(message, (response) => {
+      if (!response) { alert('No response from extension background. See extension service worker logs.'); return; }
+      if (!response.ok) { alert('Rewrite failed: ' + (response.error || response.body || 'unknown')); return; }
+      const rewritten = response.data && response.data.rewritten_text;
+      if (rewritten) {
+        compose.focus();
+        document.execCommand('selectAll', false, null);
+        document.execCommand('insertText', false, rewritten);
+      } else {
+        alert('No rewritten text returned.');
+      }
+    });
+  } catch (err) {
+    console.error('rewrite message error', err);
+    alert('Error requesting rewrite: ' + err.message);
+  }
+}
+
+// helper to call server via background (for popup/editor usage)
+function callRewriteAPI(text) {
+  return new Promise((resolve) => {
+    const message = { action: 'rewrite', payload: { original_text: text, style_profile: STYLE_PROFILE } };
+    chrome.runtime.sendMessage(message, (response) => {
+      if (!response || !response.ok) return resolve(null);
+      resolve(response.data && response.data.rewritten_text);
+    });
+  });
+}
+
+// initialize
+createFloatingUI();
+
+// expose helper for debugging in page console
+window.__SR_debug = { findFocusedCompose, callRewriteAPI };
