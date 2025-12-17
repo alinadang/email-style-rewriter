@@ -22,9 +22,9 @@
     document.getElementById('rewrite').addEventListener('click', () => {
       const txt = document.getElementById('sample').value;
       if (!txt.trim()) return alert('Paste some text first');
-      chrome.runtime.sendMessage({ action: 'rewrite', payload: { original_text: txt, style_profile: { tone: 'friendly but concise', signature: 'Best, Alex' } } }, (resp) => {
+      chrome.runtime.sendMessage({ action: 'rewrite', payload: { original_text: txt, tone: 'friendly', user_instructions: '' } }, (resp) => {
         const out = document.getElementById('out');
-        if (!resp) return out.textContent = 'No response from extension background.';
+        if (!resp) return out.textContent = 'No response from background.';
         if (!resp.ok) return out.textContent = 'Rewrite failed: ' + (resp.error || resp.body || 'unknown');
         out.textContent = resp.data.rewritten_text || 'No text returned';
       });

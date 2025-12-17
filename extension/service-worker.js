@@ -1,12 +1,13 @@
+/*
+  service-worker.js
+  Receives messages from content script and proxies network requests to server.
+*/
 chrome.runtime.onInstalled.addListener(() => {
   console.log('Style Rewriter service worker installed.');
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!message || message.action !== 'rewrite') {
-    return; // ignore other messages
-  }
-
+  if (!message || message.action !== 'rewrite') return;
   const payload = message.payload || {};
   const SERVER_URL = 'http://localhost:3000/api/rewrite';
 
@@ -32,6 +33,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   })();
 
-  // Keep channel open for async response
+  // keep channel open for async response
   return true;
 });

@@ -13,22 +13,21 @@ if (!OPENAI_KEY) console.warn('Warning: OPENAI_API_KEY not set in .env');
 
 app.post('/api/rewrite', async (req, res) => {
   try {
-    const { original_text, style_profile } = req.body;
+    const { original_text, tone, user_instructions } = req.body;
     if (!original_text) return res.status(400).json({ error: 'original_text required' });
 
-    const prompt = buildPrompt(original_text, style_profile);
+    const prompt = buildPrompt(original_text, tone || 'friendly', user_instructions || '');
 
-    // Call OpenAI Chat Completions (adjust model to one you have access to)
     const openaiResp = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_KEY}`,
+        'Authorization': 'Bearer ' + OPENAI_KEY,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You are a helpful assistant that rewrites text to match a user style profile.' },
+          { role: 'system', content: 'You rewrite emails according to user tone and instructions.' },
           { role: 'user', content: prompt }
         ],
         max_tokens: 800
@@ -42,31 +41,36 @@ app.post('/api/rewrite', async (req, res) => {
     }
 
     const j = await openaiResp.json();
-    const rewritten = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content
+    const rewritten = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content)
       ? j.choices[0].message.content.trim()
       : '';
 
-    res.json({ rewritten_text: rewritten });
+    return res.json({ rewritten_text: rewritten });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Server error', details: err.message });
+    return res.status(500).json({ error: 'Server error', details: err.message });
   }
 });
 
-function buildPrompt(original, style) {
-  const tone = (style && style.tone) ? style.tone : 'friendly but concise';
-  const signature = (style && style.signature) ? style.signature : '';
-  return `
-Rewrite the following email to match this style: Tone="${tone}". Signature="${signature}".
-Rules:
-- Preserve all facts and intent of the original.
-- Keep length within ±25% of the original.
-- Do not invent new facts.
-Original message:
-"""${original}"""
-Return only the rewritten email text (no commentary).
-`;
+function buildPrompt(original, tone, instructions) {
+  return [
+    "User style instructions:",
+    "- Tone: " + tone,
+    "- Extra instructions: " + instructions,
+    "",
+    "Rewrite the following email to match the user's style and instructions.",
+    "Rules:",
+    "1) Preserve all facts and intent.",
+    "2) Keep length roughly the same unless asked to shorten/lengthen.",
+    "3) Do not invent new facts.",
+    "4) Keep any technical details unchanged.",
+    "",
+    "Original email:",
+    '"""' + original + '"""',
+    "",
+    "Return only the rewritten email text."
+  ].join("\n");
 }
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Style rewriter server listening on ${PORT}`));
+app.listen(PORT, function() { console.log('Style rewriter server listening on ' + PORT); });
