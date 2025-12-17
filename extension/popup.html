@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Style Rewriter</title>
+  <style>
+    body { font-family: Arial, sans-serif; width: 300px; padding: 12px; }
+    textarea { width: 100%; height: 80px; }
+    button { padding: 8px 12px; margin-top: 8px; }
+    pre { white-space: pre-wrap; background:#f5f5f5; padding:8px; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <h4>Style Rewriter (MVP)</h4>
+  <p>Paste text here to test the rewrite API:</p>
+  <textarea id="sample"></textarea>
+  <button id="test">Rewrite sample</button>
+  <pre id="out"></pre>
+
+  <script>
+    document.getElementById('test').addEventListener('click', async () => {
+      const txt = document.getElementById('sample').value;
+      if (!txt.trim()) return alert('Paste some text first');
+      const out = document.getElementById('out');
+      out.textContent = 'Rewriting...';
+      try {
+        const resp = await fetch('http://localhost:3000/api/rewrite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            original_text: txt,
+            style_profile: { tone: 'friendly but concise', signature: 'Best, Alex' }
+          })
+        });
+        if (!resp.ok) throw new Error('Server error: ' + resp.statusText);
+        const data = await resp.json();
+        out.textContent = data.rewritten_text;
+      } catch (e) {
+        out.textContent = 'Error: ' + e.message;
+      }
+    });
+  </script>
+</body>
+</html>

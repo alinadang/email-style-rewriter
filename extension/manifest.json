@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Style Rewriter (MVP)",
+  "version": "0.1",
+  "description": "Rewrite Gmail drafts to match your personal style.",
+  "permissions": ["scripting", "activeTab", "storage"],
+  "host_permissions": ["https://mail.google.com/*"],
+  "background": { "service_worker": "service-worker.js" },
+  "action": { "default_title": "Style Rewriter", "default_popup": "popup.html" },
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
